@@ -1,8 +1,5 @@
-
 //#define ROBOT_EMULATION //Uncomment to use the emulated version in CoppeliaSim (does not move the real robot)
 #define PCA9685  //Uncomment to use the PCA9685 servo driver instead of the Servo library
-
-#define TIME 1000
 
 #ifdef PCA9685
   #include <Adafruit_PWMServoDriver.h>
@@ -14,7 +11,32 @@
   Servo servos[12]; //Max number of digital signals
 #endif
 
-#define JOINTS  4
+#define GRIPPER_CLOSED 20
+#define GRIPPER_OPENED 50
+#define JOINTS 4
+
+typedef struct
+{
+double l0;
+double h1;
+double l1;
+double l2;
+double l3;
+double l3I;
+double l3O;
+double l4;
+double l5;
+double d5;
+} RobotParams_t;
+RobotParams_t params={5.0,64.5,15.1,80.0,80.0,23.9,35.0,80.0,52.0,5.0};
+
+typedef struct
+{
+double x;
+double y;
+double z;
+} RobotPosition_t;
+RobotPosition_t pT={0.0,0.0,0.0};
 
 typedef struct 
 {
@@ -27,20 +49,16 @@ typedef struct
 #ifdef ROBOT_EMULATION
 RobotServo_t robotServos[JOINTS]={{1,0, 0,180},{2,0,50, 170},{3,0,20,160}};
 #else
-RobotServo_t robotServos[JOINTS]={{4,0,0,180},{5,0,50,170},{6,0,20,160},{7,0,20,60}};
+RobotServo_t robotServos[JOINTS]={{4,0,0,180},{5,2,50,170},{6,-5,20,120},{7,0,20,50}};
 #endif
-
-double q0[JOINTS]={90.0,90.0,90.0,30.0};
-double q1[JOINTS]={90.0,90.0,90.0,60.0};
-double q2[JOINTS]={90.0,90.0,90.0,20.0};
-
 //TODO: Define several configurations
-
+double q0[JOINTS]={ 90.0, 90.0, 90.0, 50.0};
+double q1[JOINTS]={ 90.0,170.0, 30.0, 50.0};
+double q2[JOINTS]={ 90.0,170.0, 30.0, 20.0};
+double q3[JOINTS]={ 90.0, 90.0, 90.0, 20.0};
 //void moveAbsJ(const RobotServo_t servos[JOINTS], const double q0[JOINTS], const double qT[JOINTS], const double T);
-
+#define TIME 3
 void setup() {
-  DDRD =  0b10000000; //Pin 13 output LED
-  PORTD = 0b10000000; //Pin 13 up level
   Serial.begin(115200);
   #ifndef ROBOT_EMULATION
     #ifdef PCA9685
@@ -51,25 +69,19 @@ void setup() {
       pwm.setPWMFreq(50);
     #endif
   #endif
-
-  //Sets the servo to the initial position
-  for (int i=0;i<JOINTS;i++){writeServo(robotServos[i],(int)q0[i]);}
-
-  for (int i=0;i<JOINTS;i++){writeServo(robotServos[i],(int)q1[i]);}
-  for (int i=0;i<JOINTS;i++){writeServo(robotServos[i],(int)q2[i]);}
-  
-  for (int i=0;i<JOINTS;i++){writeServo(robotServos[i],(int)q0[i]);}
-  
-  delay(3000);
-  //TODO: Call moveAbsJ to do some movements
-  
-  delay(3000);
-  for (int i=0;i<JOINTS;i++)
-    detachServo(robotServos[i]);
 }
  
 void loop() { 
-  
+  //Sets the servo to the initial position
+  for (int i=0;i<JOINTS;i++){writeServo(robotServos[i],(int)q0[i]);}
+  delay(100);
+  //TODO: Call moveAbsJ to do some movements
+  moveAbsJ(robotServos,q0,q1,TIME);
+  moveAbsJ(robotServos,q1,q2,TIME);
+  moveAbsJ(robotServos,q2,q3,TIME);
+  moveAbsJ(robotServos,q3,q0,TIME); 
+  for (int i=0;i<JOINTS;i++){detachServo(robotServos[i]);}
+  delay(1000);
 }
 
 void writeServo(const RobotServo_t &servo, int angle)
@@ -108,6 +120,13 @@ void moveAbsJ(const RobotServo_t robotServos[JOINTS], const double q0[JOINTS], c
 {
   double a[JOINTS],b[JOINTS],c[JOINTS],d[JOINTS],q,t,t0;
   //TODO: Compute trajectory parameters for each joint
+  for(int i=0;i<JOINTS;i++)
+  {
+    a[i]=-2*(qT[i]-q0[i])/pow(T,3);
+    b[i]=3*(qT[i]-q0[i])/pow(T,2);
+    c[i]=0.0;
+    d[i]=q0[i];
+  }
   t0=millis()/1000.0;
   t=0.0;
   while(t<T)
@@ -115,9 +134,24 @@ void moveAbsJ(const RobotServo_t robotServos[JOINTS], const double q0[JOINTS], c
     for (int i=0;i<JOINTS;i++)
     {
       //TODO: Evaluate the trajectory for joint "i" at time "t" and store the result in "q".
+      q=a[i]*pow(t,3)+b[i]*pow(t,2)+c[i]*t+d[i];
       writeServo(robotServos[i],(int)q);
     }
     delay(20);
     t=millis()/1000.0-t0;
   }
+}
+
+void moveJ(const RobotServo_t robotServos[JOINTS],const double q0[JOINTS], const RobotPosition_t target, const float T, const RobotParams_t &params)
+{
+  double qT[JOINTS];
+  inverseKin(target, params, qT);
+  //moveAbsJ(robotServos,q0,qT,T);
+  Serial.println(qT[0]);
+}
+
+void inverseKin(const RobotPosition_t &target,const RobotParams_t &params, double *q)
+{
+  q[0]= (atan2(target.x-params.l0, -target.y)+asin(params.d5/sqrt(pow(target.x-params.l0,2)+pow(target.y,2))));
+  
 }
