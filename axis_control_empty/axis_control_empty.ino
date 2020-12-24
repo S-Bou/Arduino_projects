@@ -36,7 +36,7 @@ double x;
 double y;
 double z;
 } RobotPosition_t;
-RobotPosition_t pT={params.l0+params.l1+params.l3+params.l5,-params.d5,params.h1+params.l2}; //{152.1,-5.0,144.5}
+RobotPosition_t pT0={params.l0+params.l1+params.l3+params.l5,-params.d5,params.h1+params.l2}; //{152.1,-5.0,144.5}
 RobotPosition_t pT1={180.0, -5.0, 100.0};
 typedef struct 
 {
@@ -50,13 +50,14 @@ typedef struct
 RobotServo_t robotServos[JOINTS]={{1,0, 0,180},{2,0,50, 170},{3,0,20,160}};
 #else
 RobotServo_t robotServos[JOINTS]={{4,0,0,180},{5,2,50,170},{6,-5,20,120}};
-RobotServo_t robotGripper={7,0,20,50};
+RobotServo_t robotGripper={7,0,30,50};
 #endif
 //TODO: Define several configurations
+double qN[JOINTS]={0.0,0.0,0.0};
 double q0[JOINTS]={ 90.0, 90.0, 90.0};
-double q1[JOINTS]={ 90.0,117.08, 63.47};
+
 //void moveAbsJ(const RobotServo_t servos[JOINTS], const double q0[JOINTS], const double qT[JOINTS], const double T);
-#define TIME 3
+#define TIME 2
 void setup() {
   Serial.begin(115200);
   #ifndef ROBOT_EMULATION
@@ -73,11 +74,10 @@ void setup() {
   delay(1000);
   //TODO: Call moveAbsJ to do some movements
   moveJ(robotServos, q0, pT1, TIME, params);
-
-
+  moveJ(robotServos, qN, pT0, TIME, params);
+  
   for (int i=0;i<JOINTS;i++){detachServo(robotServos[i]);}
   delay(1000);
-  
 }
 
 void loop() { 
@@ -153,6 +153,10 @@ void moveJ(const RobotServo_t robotServos[JOINTS],const double q0[JOINTS], const
   Serial.print("q1=");Serial.print(qT[0]);
   Serial.print("; q2="); Serial.print(qT[1]);
   Serial.print("; q3="); Serial.println(qT[2]);
+  for(int i=0;i<JOINTS;i++)
+  {
+    qN[i]=qT[i];
+  }
 }
 
 void inverseKin(const RobotPosition_t &target,const RobotParams_t &params, double *q)
