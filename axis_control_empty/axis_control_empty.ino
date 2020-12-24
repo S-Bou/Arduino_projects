@@ -1,17 +1,10 @@
-//#define ROBOT_EMULATION //Uncomment to use the emulated version in CoppeliaSim (does not move the real robot)
-#define PCA9685  //Uncomment to use the PCA9685 servo driver instead of the Servo library
+#include <Adafruit_PWMServoDriver.h>
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
-#ifdef PCA9685
-  #include <Adafruit_PWMServoDriver.h>
-  Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
-  #define MIN_PWM 130
-  #define MAX_PWM 570
-#else
-  #include <Servo.h>
-  Servo servos[12]; //Max number of digital signals
-#endif
+#define MIN_PWM 130
+#define MAX_PWM 570
 
-#define GRIPPER_CLOSED 20
+#define GRIPPER_CLOSED 25
 #define GRIPPER_OPENED 50
 #define JOINTS 3
 
@@ -37,7 +30,12 @@ double y;
 double z;
 } RobotPosition_t;
 RobotPosition_t pT0={params.l0+params.l1+params.l3+params.l5,-params.d5,params.h1+params.l2}; //{152.1,-5.0,144.5}
-RobotPosition_t pT1={180.0, -5.0, 100.0};
+RobotPosition_t pT1={120.0,-120.0, 120.0};
+RobotPosition_t pT2={120.0,-120.0, 90.0};
+RobotPosition_t pT3={190.0, 90.0, 120.0};
+RobotPosition_t pT4={190.0, 90.0, 80.0};
+RobotPosition_t pT5={190.0, -30.0, 90.0};
+RobotPosition_t pT6={200.0, -30.0, 50.0};
 typedef struct 
 {
     uint8_t pin;
@@ -46,77 +44,44 @@ typedef struct
     int max_pos;
 } RobotServo_t;
 
-#ifdef ROBOT_EMULATION
-RobotServo_t robotServos[JOINTS]={{1,0, 0,180},{2,0,50, 170},{3,0,20,160}};
-#else
-RobotServo_t robotServos[JOINTS]={{4,0,0,180},{5,2,50,170},{6,-5,20,120}};
+RobotServo_t robotServos[JOINTS]={{4,0,0,180},{5,2,50,170},{6,-5,30,120}};
 RobotServo_t robotGripper={7,0,30,50};
-#endif
+
 //TODO: Define several configurations
 double qN[JOINTS]={0.0,0.0,0.0};
-double q0[JOINTS]={ 90.0, 90.0, 90.0};
+double q0[JOINTS]={90.0,90.0,90.0};
 
-//void moveAbsJ(const RobotServo_t servos[JOINTS], const double q0[JOINTS], const double qT[JOINTS], const double T);
-#define TIME 2
+#define TIMEgriper 50
+#define TIMEuno 1
+#define TIMEdos 2
 void setup() {
   Serial.begin(115200);
-  #ifndef ROBOT_EMULATION
-    #ifdef PCA9685
-      //Initializes the PCA9685 servo driver
-//      Wire.pins(0,2);
-//      Wire.begin(0,2);
-      pwm.begin();
-      pwm.setPWMFreq(50);
-    #endif
-  #endif
-    //Sets the servo to the initial position
+  //Initializes the PCA9685 servo driver
+  pwm.begin();
+  pwm.setPWMFreq(50);
+  //Sets the servo to the initial position
   for (int i=0;i<JOINTS;i++){writeServo(robotServos[i],(int)q0[i]);}
-  delay(1000);
-  //TODO: Call moveAbsJ to do some movements
-  moveJ(robotServos, q0, pT1, TIME, params);
-  moveJ(robotServos, qN, pT0, TIME, params);
-  
-  for (int i=0;i<JOINTS;i++){detachServo(robotServos[i]);}
-  delay(1000);
+  writeServo(robotGripper,GRIPPER_OPENED);
+  MyTask();
 }
 
-void loop() { 
-//  writeServo(robotGripper, 30);
-//  delay(2000);
-//  writeServo(robotGripper, 50);
-//  delay(2000);
+void loop()
+{
+
 }
 
 void writeServo(const RobotServo_t &servo, int angle)
 {
   angle=constrain(angle+servo.offset,servo.min_pos,servo.max_pos);
-  #ifndef ROBOT_EMULATION
-    #ifdef PCA9685
-      int pulse_width;
-      pulse_width   = map(angle+servo.offset, 0, 180, MIN_PWM, MAX_PWM);
-      pwm.setPWM(servo.pin,0,pulse_width);
-    #else
-      servos[servo.pin].attach(servo.pin);
-      servos[servo.pin].write(angle);
-    #endif
-  #else
-    Serial.print("S");
-    Serial.print(servo.pin);
-    Serial.print(":");
-    Serial.print((int)angle,DEC);
-    Serial.println(";");
-  #endif
+  
+  int pulse_width;
+  pulse_width   = map(angle+servo.offset, 0, 180, MIN_PWM, MAX_PWM);
+  pwm.setPWM(servo.pin,0,pulse_width);
 }
 
 void detachServo(const RobotServo_t &servo)
 {
-  #ifndef ROBOT_EMULATION
-    #ifdef PCA9685
-      pwm.setPWM(servo.pin,0,0);
-    #else
-      servos[servo.pin].detach();
-    #endif
-  #endif
+  pwm.setPWM(servo.pin,0,0);
 }
 
 void moveAbsJ(const RobotServo_t robotServos[JOINTS], const double q0[JOINTS], const double qt[JOINTS], const double T)
@@ -163,7 +128,7 @@ void inverseKin(const RobotPosition_t &target,const RobotParams_t &params, doubl
 {
   double q1=atan2(target.x-params.l0, -target.y)+asin(params.d5/sqrt(pow(target.x-params.l0,2)+pow(target.y,2)));
   q[0]=q1*180/M_PI;
-  double pw[JOINTS]={target.x+(-params.l5*sin(q[0])-params.l0),target.y+(params.l5*cos(q[0])),target.z+0};
+  double pw[JOINTS]={target.x+(-params.l5*sin(q1)-params.l0),target.y+(params.l5*cos(q1)),target.z+0};
   double r=sqrt(pow(pw[0],2)+pow(pw[1],2))-params.l1;
   double ze=pw[2]-params.h1;
   double alfa=atan(ze/r);
@@ -178,4 +143,56 @@ void inverseKin(const RobotPosition_t &target,const RobotParams_t &params, doubl
   double phi=acos((pow(e,2)+pow(params.l2,2)-pow(params.l4,2))/(2*e*params.l3));
   double q3=psi+phi+M_PI/2-q2;
   q[2]=q3*180/M_PI;
+}
+
+void OpenGripper(void)
+{ 
+  for(int i=GRIPPER_CLOSED;i<GRIPPER_OPENED;i++)
+  {
+    writeServo(robotGripper, i);
+    delay(TIMEgriper);
+  }
+  detachServo(robotGripper);
+}
+
+void CloseGripper(void)
+{
+  for(int i=GRIPPER_OPENED;i>GRIPPER_CLOSED;i--)
+  {
+    writeServo(robotGripper, i);
+    delay(TIMEgriper);
+  }
+  detachServo(robotGripper);
+}
+
+void MyTask(void)
+{
+  moveJ(robotServos, q0, pT1, TIMEuno, params);
+  moveJ(robotServos, qN, pT2, TIMEdos, params);
+  CloseGripper();
+  moveJ(robotServos, qN, pT0, TIMEuno, params);
+  moveJ(robotServos, qN, pT3, TIMEuno, params);
+  moveJ(robotServos, qN, pT4, TIMEdos, params);
+  OpenGripper();
+  moveJ(robotServos, qN, pT3, TIMEdos, params);
+  moveJ(robotServos, qN, pT5, TIMEuno, params);
+  moveJ(robotServos, qN, pT6, TIMEdos, params);
+  CloseGripper();
+  moveJ(robotServos, qN, pT0, TIMEuno, params);
+  moveJ(robotServos, qN, pT1, TIMEuno, params);
+  moveJ(robotServos, qN, pT2, TIMEdos, params);
+  OpenGripper();
+  moveJ(robotServos, qN, pT1, TIMEuno, params);
+  moveJ(robotServos, qN, pT3, TIMEuno, params);
+  moveJ(robotServos, qN, pT4, TIMEdos, params);
+  CloseGripper();
+  moveJ(robotServos, qN, pT3, TIMEuno, params);
+  moveJ(robotServos, qN, pT5, TIMEuno, params);
+  moveJ(robotServos, qN, pT6, TIMEdos, params);
+  OpenGripper();
+  moveJ(robotServos, qN, pT0, TIMEuno, params);
+
+  for (int i=0;i<JOINTS;i++){detachServo(robotServos[i]);}
+  detachServo(robotGripper);
+  delay(2000);
 }
