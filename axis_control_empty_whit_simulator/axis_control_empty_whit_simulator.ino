@@ -1,5 +1,5 @@
-//#define ROBOT_EMULATION //Uncomment to use the emulated version in CoppeliaSim (does not move the real robot)
-#define PCA9685  //Uncomment to use the PCA9685 servo driver instead of the Servo library
+#define ROBOT_EMULATION //Uncomment to use the emulated version in CoppeliaSim (does not move the real robot)
+//#define PCA9685  //Uncomment to use the PCA9685 servo driver instead of the Servo library
 
 #ifdef PCA9685
   #include <Adafruit_PWMServoDriver.h>
