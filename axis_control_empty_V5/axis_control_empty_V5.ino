@@ -44,7 +44,7 @@ RobotPosition_t pT5={190.0, -30.0, 100.0};
 RobotPosition_t pT6={200.0, -30.0, 70.0};
 
 RobotPosition_t pT0L={90.0, 90.0, 90.0};
-RobotPosition_t pT1L={45.0, 90.0, 90.0};
+RobotPosition_t pT1L={140.0, 100.0, 90.0};
 
 typedef struct 
 {
@@ -71,13 +71,13 @@ void setup() {
   DDRB=0x00;  //Inicializar a nivel bajo la salida para el led
   //Sets the servo to the initial position
   for (int i=0;i<JOINTS;i++){writeServo(robotServos[i],(int)q0[i]);}
-  //moveL(robotServos, p0, pT1L, TIMEuno, params);
+  moveL(robotServos, p0, pT1L, TIMEtres, params);
 
 }
 /*-----------------------------------------------------------------------------------------------------------------------------------------------*/
 void loop()
 {
-  PickAndPlace();
+  //PickAndPlace();
 }
 /*-----------------------------------------------------------------------------------------------------------------------------------------------*/
 void writeServo(const RobotServo_t &servo, int angle)
@@ -144,6 +144,7 @@ void moveJ(const RobotServo_t robotServos[JOINTS],const double q0[JOINTS], const
 /*-----------------------------------------------------------------------------------------------------------------------------------------------*/
 void inverseKin(const RobotPosition_t &target,const RobotParams_t &params, double *q)
 {
+  //TODO: Return in q the values of the configuration for the given target position.
   double q1=atan2(target.x-params.l0, -target.y)+asin(params.d5/sqrt(pow(target.x-params.l0,2)+pow(target.y,2)));
   q[0]=q1*180/M_PI;
   double pw[JOINTS]={target.x+(-params.l5*sin(q1)-params.l0),target.y+(params.l5*cos(q1)),target.z+0};
@@ -166,7 +167,9 @@ void inverseKin(const RobotPosition_t &target,const RobotParams_t &params, doubl
 /*CONTROL LINEAL*/
 void moveL(const RobotServo_t robotServos[JOINTS], const double q0L[JOINTS], const RobotPosition_t target, const float T, const RobotParams_t &params)
 { 
-  double qC[JOINTS],a[JOINTS],b[JOINTS],c[JOINTS],d[JOINTS],s[JOINTS],t,t0;
+  double qC[JOINTS],a,b,c,d,s,t,t0;
+  RobotPosition_t p={0.0,0.0,0.0};
+  double qT[JOINTS];
   /*TODO: Call forwardKin to compute the current gripper position from the given configuration.*/
   forwardKin(qC, params, target);
   Serial.print("qC={ X, Y, Z} = {");Serial.print(qC[0]);
@@ -179,21 +182,43 @@ void moveL(const RobotServo_t robotServos[JOINTS], const double q0L[JOINTS], con
   while(t<T)
   {
     double Pt_P0=sqrt(pow(qC[0]-q0L[0],2)+pow(qC[1]-q0L[1],2)+pow(qC[2]-q0L[2],2));    
-    for(int i=0;i<JOINTS;i++)
-    {
-      a[i]=-2*Pt_P0/pow(T,3);
-      b[i]=-3*Pt_P0/pow(T,2);
-      c[i]=0.0;
-      d[i]=0.0;
-    }
+    a=-2*Pt_P0/pow(T,3);
+    b= 3*Pt_P0/pow(T,2);
+    c=0.0;
+    d=0.0;
+    s=a*pow(t,3)+b*pow(t,2)+c*t+d;
+    
     for (int i=0;i<JOINTS;i++)
     {
-      qC[i]=a[i]*pow(t,3)+b[i]*pow(t,2)+c[i]*t+d[i];
+      switch (i)
+      {
+      case 0:
+            p.x=s*((qC[i]-q0L[i])/Pt_P0)+q0L[i];
+            break;
+      case 1:
+            p.y=s*((qC[i]-q0L[i])/Pt_P0)+q0L[i];
+            break;
+      case 2:
+            p.z=s*((qC[i]-q0L[i])/Pt_P0)+q0L[i];
+            break;
+      default:
+           Serial.println("ERROR MoveL->Switch.p");
+      }
     }
-    forwardKin(qC, params, target);
-    Serial.print("s={ X, Y, Z} = {");Serial.print(s[0]);
-    Serial.print(", "); Serial.print(s[1]);
-    Serial.print(", "); Serial.print(s[2]);Serial.println("} Coordenadas");     
+    Serial.print("p={ X, Y, Z} = {");Serial.print(p.x);
+    Serial.print(", "); Serial.print(p.y);
+    Serial.print(", "); Serial.print(p.z);Serial.println("} Coordenadas"); 
+    inverseKin(p, params, qT); 
+    /*Comprobación de que los cálculos dan valores correctos*/
+    DataError(qT);    
+    Serial.print("qT={ X, Y, Z} = {");Serial.print(qT[0]);
+    Serial.print(", "); Serial.print(qT[1]);
+    Serial.print(", "); Serial.print(qT[2]);Serial.println("} Ángulo"); 
+ 
+    for (int i=0;i<JOINTS;i++)
+    {
+       writeServo(robotServos[i],(int)qT[i]);
+    }
     delay(20);
     t=millis()/1000.0-t0;
   } 
